@@ -16,7 +16,7 @@ export function apply(ctx, config) {
     // 卡片窗口依赖 Windows PowerShell + WPF；其它平台安静退出
     return;
   }
-  const intervalMs = Math.max(200, Number(config?.intervalMs ?? 700));
+  const intervalMs = Math.max(200, Number(config?.intervalMs ?? 450));
   const maxCards = Math.max(1, Number(config?.maxCards ?? 6));
   const home = process.env.DSH_HOME || path.join(os.homedir(), ".dsh");
   const dir = path.join(home, "work-cards");
@@ -111,6 +111,7 @@ export function apply(ctx, config) {
 
   const version = String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8);
   let loadedVersion = null;
+  let logCacheHint = false;
   const writeState = () => {
     try {
       if (loadedVersion !== version) {
@@ -118,6 +119,11 @@ export function apply(ctx, config) {
           .then((m) => { collectFn = m.collect; loadedVersion = version; })
           .catch((e) => { noteError(e); });
         if (loadedVersion !== version) return;
+      }
+      const reqPath = path.join(dir, "refresh.req");
+      if (fs.existsSync(reqPath)) {
+        try { fs.unlinkSync(reqPath); } catch { }
+        logCacheHint = true;
       }
       const state = collectFn(maxCards);
       const tmp = statePath + ".tmp";

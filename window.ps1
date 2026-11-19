@@ -817,6 +817,7 @@ $timer.Add_Tick({
         foreach ($k in @($script:wins.Keys)) {
             $cw = $script:wins[$k]
             if ($cw.IsVisible) { Place-Side $cw; Position-Detail $cw }
+        Position-Tools
         }
     } catch { Log ('tick: ' + $_.Exception.Message) }
 })
@@ -834,7 +835,8 @@ $anim.Add_Tick({
             if ([bool]$w.Tag.dragging) { continue }
             $tag = $w.Tag
             if ([bool]$tag.indet) {
-                $phase = ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() % 1600) / 1600.0
+                $raw = ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() % 1600) / 1600.0
+                $phase = 1.0 - [Math]::Abs(1.0 - 2.0 * $raw)
                 $seg = 0.3
                 $left = $phase * (1.0 - $seg)
                 $right = 1.0 - $left - $seg
@@ -858,5 +860,60 @@ $anim.Add_Tick({
     } catch { }
 })
 $anim.Start()
+$script:tools = $null
+function New-Tools {
+    $win = New-Object System.Windows.Window
+    $win.WindowStyle = 'None'
+    $win.Background = Brush '#FFFFFFFF'
+    $win.Topmost = $true
+    $win.ShowInTaskbar = $false
+    $win.Width = 96
+    $win.Height = 28
+    $win.ResizeMode = 'NoResize'
+    $bd = New-Object System.Windows.Controls.Border
+    $bd.CornerRadius = 6
+    $bd.Background = Brush '#FFFFFFFF'
+    $bd.BorderBrush = Brush '#FFE2E5EA'
+    $bd.BorderThickness = 1
+    $win.Content = $bd
+    $sp = New-Object System.Windows.Controls.StackPanel
+    $sp.Orientation = 'Horizontal'
+    $sp.HorizontalAlignment = 'Center'
+    $sp.VerticalAlignment = 'Center'
+    $bd.Child = $sp
+    $btnRefresh = New-Object System.Windows.Controls.TextBlock
+    $btnRefresh.Text = [char]0x21BB
+    $btnRefresh.FontFamily = 'Segoe UI'
+    $btnRefresh.FontSize = 13
+    $btnRefresh.Foreground = Brush '#FF6B7280'
+    $btnRefresh.Margin = '8,0,8,0'
+    $btnRefresh.Cursor = 'Hand'
+    $btnRefresh.Add_MouseLeftButtonUp({ param($s, $e); try { Set-Content -Path (Join-Path $env:DSH_WORK_CARDS_DIR 'refresh.req') -Value ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()) -Encoding UTF8 } catch { } })
+    $sp.Children.Add($btnRefresh) | Out-Null
+    $btnRestore = New-Object System.Windows.Controls.TextBlock
+    $btnRestore.Text = [char]0x27F2
+    $btnRestore.FontFamily = 'Segoe UI'
+    $btnRestore.FontSize = 13
+    $btnRestore.Foreground = Brush '#FF6B7280'
+    $btnRestore.Margin = '8,0,8,0'
+    $btnRestore.Cursor = 'Hand'
+    $btnRestore.Add_MouseLeftButtonUp({ param($s, $e); try { $script:dismissed = @{}; Save-Dismissed $script:dismissed; $script:layoutKey = ''; Layout-Stack } catch { } })
+    $sp.Children.Add($btnRestore) | Out-Null
+    return $win
+}
+
+function Position-Tools {
+    try {
+        if ($null -eq $script:tools) { return }
+        $first = $null
+        foreach ($k in $script:order) {
+            if ($script:wins.ContainsKey($k) -and $script:wins[$k].IsVisible) { $first = $script:wins[$k]; break }
+        }
+        $script:tools.Left = 16
+        if ($first) { $script:tools.Top = [Math]::Max(8, [double]$first.Top - 34) } else { $script:tools.Top = 40 }
+    } catch { }
+}
+$script:tools = @(New-Tools)[-1]
+if ($null -ne $script:tools) { $script:tools.Show(); Position-Tools }
 Log 'manager started'
 $app.Run() | Out-Null
