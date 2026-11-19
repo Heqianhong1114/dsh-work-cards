@@ -1,12 +1,10 @@
-# dsh-work-cards
+﻿# dsh-work-cards
 
 > 把"AI 现在在干嘛"做成桌面上看得见的东西。为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）设计的 Windows 桌面浮窗插件。
 
 **English**: Floating, draggable desktop cards for DeepSeek Harness. Each card shows one live session: what the agent is doing right now, coarse progress from its todo plan, elapsed time, a calibrated ETA range, and a stuck detector. Windows only (PowerShell + WPF), reads local session logs only, no network access.
 
-<p align="center">
-  <em>截图待补：卡片 + 右侧动作浮层</em>
-</p>
+![卡片与动作浮层](docs/screenshot.png)
 
 ## 解决什么问题
 
@@ -31,6 +29,8 @@
 - **右侧浮层**：点箭头看最近 6 步动作（命令/文件/搜索词）
 - **完成提示音**：默认 Windows 系统提示音，可换成自己的音频
 - **完成态**：浅蓝底 + `已完成`，不自动消失，等你点 `×`
+- **无计划时**：进度条变成循环滑动的"加载中"动画，不编造百分比
+- **有计划时**：实心比例条，按 `已完成/总数` 填充
 
 ## 安装
 
