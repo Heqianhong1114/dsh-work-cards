@@ -56,7 +56,7 @@ dsh plugin --profile desktop add link:/path/to/dsh-work-cards
 - id: work-cards
   name: 'dsh-work-cards'
   config:
-    intervalMs: 700      # 刷新间隔（毫秒）
+    intervalMs: 450      # 刷新间隔（毫秒）
     maxCards: 6          # 最多几张卡
     todoReminder: true   # 是否给 agent 注入"先列计划"的系统提示
 ```
