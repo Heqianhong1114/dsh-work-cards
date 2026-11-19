@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "dsh-work-cards",
   "version": "0.1.0",
   "type": "module",
@@ -14,7 +14,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/USERNAME/dsh-work-cards.git"
+    "url": "https://github.com/Heqianhong1114/dsh-work-cards.git"
   },
   "exports": {
     ".": "./index.js",
