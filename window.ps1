@@ -566,13 +566,17 @@ function Update-Card($w, $card) {
     if ($cur -eq 'running' -or $cur -eq 'thinking' -or $cur -eq 'waiting') { $t.wasActive = $true }
     if ($cur -eq 'idle') { $t.wasActive = $false }
     $t.prevStatus = $cur
-    $ratio = 0.0
-    if ($null -ne $card.pct) { $ratio = [double]$card.pct }
-    elseif (-not $card.ended) { $ratio = 0.05 }
-    $ratio = [Math]::Max(0.0, [Math]::Min(1.0, $ratio))
+    # 进度条 = 状态指示：进行中循环滑块 / 等你确认半条 / 已完成满条
     $idKey = [string]$w.Tag.id
-    $script:target[$idKey] = $ratio
-    if (-not $script:disp.ContainsKey($idKey)) { $script:disp[$idKey] = $ratio }
+    $st = [string]$card.status
+    $det = -1.0
+    if ($card.ended -eq $true) { $det = 1.0 }
+    elseif ($st -eq 'waiting') { $det = 0.5 }
+    $w.Tag.indet = ($det -lt 0)
+    if ($det -ge 0) {
+        $script:target[$idKey] = $det
+        if (-not $script:disp.ContainsKey($idKey)) { $script:disp[$idKey] = $det }
+    }
     if ([int]$card.total -gt 0) {
         $t.track.Visibility = 'Visible'
         $etaTxt = if ($card.eta) { ' · 约 ' + (Format-Ms ([int]$card.eta)) } else { '' }
@@ -826,11 +830,19 @@ $anim.Add_Tick({
     try {
         foreach ($k in @($script:wins.Keys)) {
             $w = $script:wins[$k]
-            if ([bool]$w.Tag.dragging) {
-                $placed += [pscustomobject]@{ x = [double]$w.Left; y = [double]$w.Top; w = [double]$w.Width; h = [double]$w.Height }
+            if ($null -eq $w -or -not $w.IsVisible) { continue }
+            if ([bool]$w.Tag.dragging) { continue }
+            $tag = $w.Tag
+            if ([bool]$tag.indet) {
+                $phase = ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() % 1600) / 1600.0
+                $seg = 0.3
+                $left = $phase * (1.0 - $seg)
+                $right = 1.0 - $left - $seg
+                $tag.col0.Width = New-Object System.Windows.GridLength -ArgumentList @([double]$left, ([System.Windows.GridUnitType]::Star))
+                $tag.colF.Width = New-Object System.Windows.GridLength -ArgumentList @([double]$seg, ([System.Windows.GridUnitType]::Star))
+                $tag.col1.Width = New-Object System.Windows.GridLength -ArgumentList @([double]$right, ([System.Windows.GridUnitType]::Star))
                 continue
             }
-            if ($null -eq $w -or -not $w.IsVisible) { continue }
             if (-not $script:target.ContainsKey($k)) { continue }
             $cur = [double]$script:disp[$k]
             $tgt = [double]$script:target[$k]
@@ -839,8 +851,9 @@ $anim.Add_Tick({
             $script:disp[$k] = $cur
             $r1 = [double]$cur
             $r2 = [double](1.0 - $r1)
-            $w.Tag.col0.Width = New-Object System.Windows.GridLength -ArgumentList @($r1, ([System.Windows.GridUnitType]::Star))
-            $w.Tag.col1.Width = New-Object System.Windows.GridLength -ArgumentList @($r2, ([System.Windows.GridUnitType]::Star))
+            $tag.col0.Width = New-Object System.Windows.GridLength -ArgumentList @(0.0, ([System.Windows.GridUnitType]::Star))
+            $tag.colF.Width = New-Object System.Windows.GridLength -ArgumentList @($r1, ([System.Windows.GridUnitType]::Star))
+            $tag.col1.Width = New-Object System.Windows.GridLength -ArgumentList @($r2, ([System.Windows.GridUnitType]::Star))
         }
     } catch { }
 })
