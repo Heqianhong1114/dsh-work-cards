@@ -107,7 +107,6 @@ $script:phase = 0
 $script:details = @{}
 $script:aux = New-Object System.Collections.ArrayList
 $script:target = @{}
-$script:lastCue = 0
 $script:disp = @{}
 $script:layoutKey = ""
 $script:order = New-Object System.Collections.ArrayList
@@ -411,78 +410,6 @@ function Place-Card($w, [int]$index) {
     }
 }
 
-$script:player = $null
-$script:sound = $null
-function New-BeepWav([string]$path) {
-    try {
-        $rate = 44100
-        $dur = 0.45
-        $n = [int]($rate * $dur)
-        $data = New-Object byte[] ($n * 2)
-        for ($i = 0; $i -lt $n; $i++) {
-            $tSec = $i / $rate
-            $freq = 880 + 440 * ($tSec / $dur)
-            $env = [Math]::Min(1.0, $tSec * 40) * [Math]::Min(1.0, ($dur - $tSec) * 8)
-            $v = [Math]::Sin(2 * [Math]::PI * $freq * $tSec) * 0.35 * $env
-            $s = [int]($v * 32767)
-            $data[$i * 2] = [byte]($s -band 0xFF)
-            $data[$i * 2 + 1] = [byte](($s -shr 8) -band 0xFF)
-        }
-        $ms = New-Object System.IO.MemoryStream
-        $bw = New-Object System.IO.BinaryWriter($ms)
-        $bw.Write([char[]]'RIFF')
-        $bw.Write([int](36 + $data.Length))
-        $bw.Write([char[]]'WAVE')
-        $bw.Write([char[]]'fmt ')
-        $bw.Write([int]16)
-        $bw.Write([int16]1)
-        $bw.Write([int16]1)
-        $bw.Write([int]$rate)
-        $bw.Write([int]($rate * 2))
-        $bw.Write([int16]2)
-        $bw.Write([int16]16)
-        $bw.Write([char[]]'data')
-        $bw.Write([int]$data.Length)
-        $bw.Write($data)
-        $bw.Flush()
-        [System.IO.File]::WriteAllBytes($path, $ms.ToArray())
-        return $true
-    } catch { Log ('beep gen err: ' + $_.Exception.Message); return $false }
-}
-
-function Init-Cue {
-    try {
-        $cuePath = $env:DSH_WORK_CARDS_CUE
-        if ($cuePath -and (Test-Path $cuePath)) {
-            $script:player = New-Object System.Windows.Media.MediaPlayer
-            $script:player.Open([Uri]$cuePath)
-            $script:player.Volume = 1.0
-            Log ('cue loaded: ' + $cuePath)
-            return
-        }
-        # 没配置就用生成的提示音（不依赖系统声音方案）
-        $wav = Join-Path $env:DSH_WORK_CARDS_DIR 'cue.wav'
-        if ((-not (Test-Path $wav)) -and (New-BeepWav $wav)) { Log 'cue wav generated' }
-        if (Test-Path $wav) {
-            $script:sound = New-Object System.Media.SoundPlayer($wav)
-            $script:sound.Load()
-            Log 'cue wav loaded'
-        }
-    } catch { Log ('cue init err: ' + $_.Exception.Message) }
-}
-function Play-Cue([string]$kind) {
-    try {
-        if ($script:player) {
-            $script:player.Position = [TimeSpan]::Zero
-            $script:player.Play()
-        } elseif ($kind -eq 'wait') {
-            [System.Media.SystemSounds]::Exclamation.Play()
-        } else {
-            [System.Media.SystemSounds]::Asterisk.Play()
-        }
-    } catch { }
-    Log ("cue " + $kind)
-}
 
 function Toggle-Detail($w) {
     try {
@@ -585,6 +512,7 @@ function Render-Detail($w, $card) {
 }
 function Update-Card($w, $card) {
     $t = $w.Tag
+    $nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
     $t.title.Text = [string]$card.title
     $t.act.Text = [string]$card.activity
     $t.el.Text = Format-Ms ([int]$card.elapsed)
@@ -606,10 +534,19 @@ function Update-Card($w, $card) {
         $t.border.Background = Brush '#FFFFFFFF'
         $t.border.BorderBrush = Brush '#FFE2E5EA'
     }
+    if ($nowMs -lt [double]$t.flashUntil) {
+        $t.border.BorderThickness = 2
+        $t.border.BorderBrush = Brush '#FF3B82F6'
+        $w.Background = Brush '#FFE8F1FF'
+        $t.border.Background = Brush '#FFE8F1FF'
+    } else {
+        $t.border.BorderThickness = 1
+    }
     $prevStatus = [string]$t.prevStatus
     if ($cur -eq 'idle' -and [bool]$t.wasActive -and $card.ended -eq $true -and ([string]$card.endKind -eq 'completed' -or -not $card.endKind)) {
         $nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-        if (($nowMs - [double]$script:lastCue) -gt 5000) { Play-Cue 'done'; $script:lastCue = $nowMs }
+        $t.flashUntil = $nowMs + 3000
+        Log 'flash: turn completed'
     }
     if ($cur -eq 'running' -or $cur -eq 'thinking' -or $cur -eq 'waiting') { $t.wasActive = $true }
     if ($cur -eq 'idle') { $t.wasActive = $false }
@@ -874,7 +811,6 @@ $timer.Add_Tick({
     } catch { Log ('tick: ' + $_.Exception.Message) }
 })
 
-Init-Cue
 $timer.Start()
 
 $anim = New-Object System.Windows.Threading.DispatcherTimer

@@ -5,5 +5,4 @@
         intervalMs: 450
         maxCards: 6
         todoReminder: true
-        cueFile: ''
 

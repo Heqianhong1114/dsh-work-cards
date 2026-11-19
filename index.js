@@ -90,7 +90,7 @@ export function apply(ctx, config) {
     try {
       writeRunner();
       child = spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", runnerPath], {
-        env: { ...process.env, DSH_WORK_CARDS_DIR: dir, DSH_WORK_CARDS_CUE: String(config?.cueFile || "") },
+        env: { ...process.env, DSH_WORK_CARDS_DIR: dir },
         windowsHide: true,
         stdio: "ignore",
         detached: false,
