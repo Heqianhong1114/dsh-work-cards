@@ -4,7 +4,7 @@
 
 **English**: Floating, draggable desktop cards for DeepSeek Harness. Each card shows one live session: what the agent is doing right now, coarse progress from its todo plan, elapsed time, a calibrated ETA range, and a stuck detector. Windows only (PowerShell + WPF), reads local session logs only, no network access.
 
-![卡片与动作浮层](docs/screenshot.png)
+![四种状态：已完成 / 进行中 / 等你确认 / 已终止](docs/screenshot.png)
 
 ## 解决什么问题
 
