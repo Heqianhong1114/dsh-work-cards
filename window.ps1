@@ -867,7 +867,7 @@ function New-Tools {
     $win.Background = Brush '#FFFFFFFF'
     $win.Topmost = $true
     $win.ShowInTaskbar = $false
-    $win.Width = 96
+    $win.Width = 168
     $win.Height = 28
     $win.ResizeMode = 'NoResize'
     $bd = New-Object System.Windows.Controls.Border
@@ -882,20 +882,20 @@ function New-Tools {
     $sp.VerticalAlignment = 'Center'
     $bd.Child = $sp
     $btnRefresh = New-Object System.Windows.Controls.TextBlock
-    $btnRefresh.Text = [char]0x21BB
-    $btnRefresh.FontFamily = 'Segoe UI'
-    $btnRefresh.FontSize = 13
+    $btnRefresh.Text = '更新'
+    $btnRefresh.FontFamily = 'Microsoft YaHei UI'
+    $btnRefresh.FontSize = 11
     $btnRefresh.Foreground = Brush '#FF6B7280'
-    $btnRefresh.Margin = '8,0,8,0'
+    $btnRefresh.Margin = '10,0,8,0'
     $btnRefresh.Cursor = 'Hand'
     $btnRefresh.Add_MouseLeftButtonUp({ param($s, $e); try { Set-Content -Path (Join-Path $env:DSH_WORK_CARDS_DIR 'refresh.req') -Value ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()) -Encoding UTF8 } catch { } })
     $sp.Children.Add($btnRefresh) | Out-Null
     $btnRestore = New-Object System.Windows.Controls.TextBlock
-    $btnRestore.Text = [char]0x27F2
-    $btnRestore.FontFamily = 'Segoe UI'
-    $btnRestore.FontSize = 13
+    $btnRestore.Text = '恢复窗口'
+    $btnRestore.FontFamily = 'Microsoft YaHei UI'
+    $btnRestore.FontSize = 11
     $btnRestore.Foreground = Brush '#FF6B7280'
-    $btnRestore.Margin = '8,0,8,0'
+    $btnRestore.Margin = '0,0,10,0'
     $btnRestore.Cursor = 'Hand'
     $btnRestore.Add_MouseLeftButtonUp({ param($s, $e); try { $script:dismissed = @{}; Save-Dismissed $script:dismissed; $script:layoutKey = ''; Layout-Stack } catch { } })
     $sp.Children.Add($btnRestore) | Out-Null
