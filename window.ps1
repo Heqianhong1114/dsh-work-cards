@@ -412,19 +412,64 @@ function Place-Card($w, [int]$index) {
 }
 
 $script:player = $null
+$script:sound = $null
+function New-BeepWav([string]$path) {
+    try {
+        $rate = 44100
+        $dur = 0.45
+        $n = [int]($rate * $dur)
+        $data = New-Object byte[] ($n * 2)
+        for ($i = 0; $i -lt $n; $i++) {
+            $tSec = $i / $rate
+            $freq = 880 + 440 * ($tSec / $dur)
+            $env = [Math]::Min(1.0, $tSec * 40) * [Math]::Min(1.0, ($dur - $tSec) * 8)
+            $v = [Math]::Sin(2 * [Math]::PI * $freq * $tSec) * 0.35 * $env
+            $s = [int]($v * 32767)
+            $data[$i * 2] = [byte]($s -band 0xFF)
+            $data[$i * 2 + 1] = [byte](($s -shr 8) -band 0xFF)
+        }
+        $ms = New-Object System.IO.MemoryStream
+        $bw = New-Object System.IO.BinaryWriter($ms)
+        $bw.Write([char[]]'RIFF')
+        $bw.Write([int](36 + $data.Length))
+        $bw.Write([char[]]'WAVE')
+        $bw.Write([char[]]'fmt ')
+        $bw.Write([int]16)
+        $bw.Write([int16]1)
+        $bw.Write([int16]1)
+        $bw.Write([int]$rate)
+        $bw.Write([int]($rate * 2))
+        $bw.Write([int16]2)
+        $bw.Write([int16]16)
+        $bw.Write([char[]]'data')
+        $bw.Write([int]$data.Length)
+        $bw.Write($data)
+        $bw.Flush()
+        [System.IO.File]::WriteAllBytes($path, $ms.ToArray())
+        return $true
+    } catch { Log ('beep gen err: ' + $_.Exception.Message); return $false }
+}
+
 function Init-Cue {
     try {
         $cuePath = $env:DSH_WORK_CARDS_CUE
-
         if ($cuePath -and (Test-Path $cuePath)) {
             $script:player = New-Object System.Windows.Media.MediaPlayer
             $script:player.Open([Uri]$cuePath)
             $script:player.Volume = 1.0
             Log ('cue loaded: ' + $cuePath)
+            return
         }
-    } catch { Log ('cue load err: ' + $_.Exception.Message) }
+        # 没配置就用生成的提示音（不依赖系统声音方案）
+        $wav = Join-Path $env:DSH_WORK_CARDS_DIR 'cue.wav'
+        if ((-not (Test-Path $wav)) -and (New-BeepWav $wav)) { Log 'cue wav generated' }
+        if (Test-Path $wav) {
+            $script:sound = New-Object System.Media.SoundPlayer($wav)
+            $script:sound.Load()
+            Log 'cue wav loaded'
+        }
+    } catch { Log ('cue init err: ' + $_.Exception.Message) }
 }
-
 function Play-Cue([string]$kind) {
     try {
         if ($script:player) {
@@ -547,6 +592,7 @@ function Update-Card($w, $card) {
         'running' { $t.dot.Fill = Brush '#FF22C55E' }
         'thinking' { $t.dot.Fill = Brush '#FF3B82F6' }
         'waiting' { $t.dot.Fill = Brush '#FFF59E0B' }
+        'stopped' { $t.dot.Fill = Brush '#FFEF4444' }
         default { $t.dot.Fill = Brush '#FF9CA3AF' }
     }
     $cur = [string]$card.status
@@ -561,7 +607,7 @@ function Update-Card($w, $card) {
         $t.border.BorderBrush = Brush '#FFE2E5EA'
     }
     $prevStatus = [string]$t.prevStatus
-    if ($cur -eq 'idle' -and [bool]$t.wasActive -and $card.ended -eq $true) {
+    if ($cur -eq 'idle' -and [bool]$t.wasActive -and $card.ended -eq $true -and ([string]$card.endKind -eq 'completed' -or -not $card.endKind)) {
         $nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
         if (($nowMs - [double]$script:lastCue) -gt 5000) { Play-Cue 'done'; $script:lastCue = $nowMs }
     }
@@ -572,7 +618,8 @@ function Update-Card($w, $card) {
     $idKey = [string]$w.Tag.id
     $st = [string]$card.status
     $det = -1.0
-    if ($card.ended -eq $true) { $det = 1.0 }
+    if ($cur -eq 'stopped') { $det = 0.5 }
+    elseif ($card.ended -eq $true) { $det = 1.0 }
     elseif ($st -eq 'waiting') { $det = 0.5 }
     $w.Tag.indet = ($det -lt 0)
     if ($det -ge 0) {
@@ -586,6 +633,9 @@ function Update-Card($w, $card) {
     } elseif ($card.status -eq 'waiting') {
         $t.track.Visibility = 'Visible'
         $t.foot.Text = '等你确认'
+    } elseif ($card.status -eq 'stopped') {
+        $t.track.Visibility = 'Visible'
+        $t.foot.Text = '已终止'
     } elseif ($card.status -eq 'idle') {
         $t.track.Visibility = 'Visible'
         $t.foot.Text = '已完成'
