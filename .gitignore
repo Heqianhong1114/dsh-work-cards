@@ -1,0 +1,9 @@
+node_modules/
+*.log
+plugin.err
+state.json
+positions.json
+dismissed.json
+manager.hb
+manager.lock
+.DS_Store

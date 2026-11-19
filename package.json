@@ -1,0 +1,44 @@
+{
+  "name": "dsh-work-cards",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Floating, draggable desktop cards that show what each DSH session is doing right now",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "floating-window",
+    "desktop",
+    "progress"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/USERNAME/dsh-work-cards.git"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./icon": "./icon.svg",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "lib",
+    "window.ps1",
+    "cordis.patch.yml",
+    "locale",
+    "docs",
+    "icon.svg"
+  ],
+  "engines": {
+    "dsh": ">=0.2.2-rc.5"
+  },
+  "os": [
+    "win32"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

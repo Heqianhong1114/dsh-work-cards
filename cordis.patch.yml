@@ -1,0 +1,8 @@
+- insert:
+    - id: work-cards
+      name: 'dsh-work-cards'
+      config:
+        intervalMs: 700
+        maxCards: 6
+        todoReminder: true
+        cueFile: ''

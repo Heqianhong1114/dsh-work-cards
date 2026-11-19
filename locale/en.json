@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Work cards",
+    "description": "Floating cards that show what every open session is doing right now, with coarse progress and a time estimate. Draggable, always on top, bottom-left by default.",
+    "detail": "docs/DETAIL.md"
+  }
+}
