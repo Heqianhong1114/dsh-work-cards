@@ -319,7 +319,7 @@ function Card-Window([string]$id, [int]$index) {
     $dborder.Child = $detail
     $detail.Visibility = 'Visible'
 
-    $w.Tag = @{ id = $id; title = $title; dot = $dot; act = $act; el = $el; fill = $fill; foot = $foot; toggle = $toggle; toggleText = $tglText; col0 = $col0; col1 = $col1; border = $border; detail = $detail; side = $side; sideText = $sideText; dwin = $dwin; track = $track; sig = ''; noDetail = $false }
+    $w.Tag = @{ id = $id; title = $title; dot = $dot; act = $act; el = $el; fill = $fill; foot = $foot; toggle = $toggle; toggleText = $tglText; col0 = $col0; colF = $colF; col1 = $col1; border = $border; detail = $detail; side = $side; sideText = $sideText; dwin = $dwin; track = $track; sig = ''; noDetail = $false }
 
     $w.Add_Closed({ try { $w.Tag.side.Close() } catch { }; try { $w.Tag.dwin.Close() } catch { } })
     $w.Add_MouseLeftButtonDown({
