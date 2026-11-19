@@ -415,8 +415,8 @@ $script:player = $null
 function Init-Cue {
     try {
         $cuePath = $env:DSH_WORK_CARDS_CUE
-        if (-not $cuePath) { $cuePath = Join-Path $env:DSH_WORK_CARDS_DIR 'cue.mp3' }
-        if (Test-Path $cuePath) {
+
+        if ($cuePath -and (Test-Path $cuePath)) {
             $script:player = New-Object System.Windows.Media.MediaPlayer
             $script:player.Open([Uri]$cuePath)
             $script:player.Volume = 1.0
