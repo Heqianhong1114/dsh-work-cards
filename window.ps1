@@ -278,14 +278,16 @@ function Card-Window([string]$id, [int]$index) {
     $row2.Children.Add($track) | Out-Null
     $bar = New-Object System.Windows.Controls.Grid
     $col0 = New-Object System.Windows.Controls.ColumnDefinition
+    $colF = New-Object System.Windows.Controls.ColumnDefinition
     $col1 = New-Object System.Windows.Controls.ColumnDefinition
     $bar.ColumnDefinitions.Add($col0) | Out-Null
+    $bar.ColumnDefinitions.Add($colF) | Out-Null
     $bar.ColumnDefinitions.Add($col1) | Out-Null
     $fill = New-Object System.Windows.Controls.Border
     $fill.Height = 6
     $fill.Background = Brush '#FF3B82F6'
     $fill.HorizontalAlignment = 'Stretch'
-    [System.Windows.Controls.Grid]::SetColumn($fill, 0)
+    [System.Windows.Controls.Grid]::SetColumn($fill, 1)
     $bar.Children.Add($fill) | Out-Null
     $track.Child = $bar
 
