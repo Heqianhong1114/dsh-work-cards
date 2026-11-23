@@ -98,10 +98,10 @@ function Dismiss-Card($w) {
 
 $script:positions = Load-Positions
 $script:offX = 0.0
-$script:offY = 0.0
-if ($script:positions.ContainsKey('__stack')) { $st0 = $script:positions['__stack']; $script:offX = [double]$st0[0]; $script:offY = [double]$st0[1] }
+$script:offY = 300.0
+if ($script:positions.ContainsKey('__base')) { $st0 = $script:positions['__base']; $script:offX = [double]$st0[0]; $script:offY = [double]$st0[1] }
 # 旧版本按卡片存坐标；现在整组移动只存 __stack，迁移时清掉单卡坐标
-foreach ($k in @($script:positions.Keys)) { if ($k -ne '__stack') { $script:positions.Remove($k) } }
+foreach ($k in @($script:positions.Keys)) { if ($k -ne '__base') { $script:positions.Remove($k) } }
 Save-Positions $script:positions
 $script:dismissed = Load-Dismissed
 $script:wins = @{}
@@ -378,7 +378,7 @@ function Card-Window([string]$id, [int]$index) {
             $dy = ($pt.Y - $script:drag.cy) / [double]$script:dpiScale
             $script:offX = [double]$script:offX + $dx
             $script:offY = [double]$script:offY + $dy
-            $script:positions['__stack'] = @([int]$script:offX, [int]$script:offY)
+            $script:positions['__base'] = @([int]$script:offX, [int]$script:offY)
             Save-Positions $script:positions
             $script:drag = $null
             $sender.ReleaseMouseCapture()
@@ -418,7 +418,7 @@ function Place-Card($w, [int]$index) {
     } catch { }
     if ($s -le 0) { $s = 1.0 }
     $sh = $script:screenH / $s
-    $baseX = 16 + [double]$script:offX
+    $baseX = [double]$script:offX
     $baseY = [double]$script:offY
     if ($script:positions.ContainsKey($id)) {
         $p = $script:positions[$id]
@@ -460,7 +460,7 @@ function Place-Detail($w) {
         if ($dipH -gt 0) { $s = $script:screenH / $dipH }
         if ($s -le 0) { $s = 1.0 }
         $sh = $script:screenH / $s
-    $baseX = 16 + [double]$script:offX
+    $baseX = [double]$script:offX
     $baseY = [double]$script:offY
         $dipW = [double][System.Windows.SystemParameters]::PrimaryScreenWidth
         $sw = if ($dipW -gt 0) { $dipW } else { 1920 }
@@ -715,14 +715,14 @@ function Layout-Stack {
     } catch { }
     if ($s -le 0) { $s = 1.0 }
     $sh = $script:screenH / $s
-    $baseX = 16 + [double]$script:offX
+    $baseX = [double]$script:offX
     $baseY = [double]$script:offY
     $gap = 8.0
     if ($script:expanded) {
         $total = 0.0
         foreach ($k in $ids) { $total += [double]$script:wins[$k].Height }
         $total += $gap * ($ids.Count - 1)
-        $y = [Math]::Round($sh - 56 - $total + $baseY)
+        $y = [Math]::Round($baseY)
         if ($y -lt 20) { $y = 20 }
         foreach ($k in $ids) {
             $w = $script:wins[$k]
@@ -741,7 +741,7 @@ function Layout-Stack {
     } else {
         $w = $script:wins[$ids[0]]
             $w.Left = [Math]::Round($baseX)
-        $w.Top = [Math]::Round($sh - 56 - [double]$w.Height + $baseY)
+        $w.Top = [Math]::Round($baseY)
         if (-not $w.IsVisible) { $w.Show(); Round-Card $w }
         Raise-Card $w
         Place-Side $w
@@ -921,6 +921,7 @@ function New-Tools {
     $btnRefresh.Margin = '10,0,8,0'
     $btnRefresh.Cursor = 'Hand'
     $btnRefresh.Add_MouseLeftButtonUp({ param($s, $e); try { Set-Content -Path (Join-Path $env:DSH_WORK_CARDS_DIR 'refresh.req') -Value ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()) -Encoding UTF8 } catch { } })
+    $btnRefresh.Add_MouseLeftButtonDown({ param($s, $e) $e.Handled = $true })
     $sp.Children.Add($btnRefresh) | Out-Null
     $btnRestore = New-Object System.Windows.Controls.TextBlock
     $btnRestore.Text = '恢复窗口'
@@ -930,28 +931,30 @@ function New-Tools {
     $btnRestore.Margin = '0,0,10,0'
     $btnRestore.Cursor = 'Hand'
     $btnRestore.Add_MouseLeftButtonUp({ param($s, $e); try { $script:dismissed = @{}; Save-Dismissed $script:dismissed; $script:layoutKey = ''; Layout-Stack } catch { } })
+    $btnRestore.Add_MouseLeftButtonDown({ param($s, $e) $e.Handled = $true })
     $sp.Children.Add($btnRestore) | Out-Null
+$win.Add_MouseLeftButtonDown({
+    param($sender, $e)
+    try {
+        $sender.DragMove()
+        $script:offX = [double]$sender.Left
+        $script:offY = [double]$sender.Top + 34
+        $script:positions['__base'] = @([int]$script:offX, [int]$script:offY)
+        Save-Positions $script:positions
+        $script:layoutKey = ''
+        Layout-Stack
+    } catch { }
+})
     return $win
 }
 
 function Position-Tools {
     try {
         if ($null -eq $script:tools) { return }
-        # 以屏幕上最靠上的可见卡片为锚点，卡片移动/隐藏时同步
-        $anchor = $null
-        foreach ($k in @($script:wins.Keys)) {
-            $c = $script:wins[$k]
-            if ($null -eq $c -or -not $c.IsVisible) { continue }
-            if ($null -eq $anchor -or [double]$c.Top -lt [double]$anchor.Top) { $anchor = $c }
-        }
-        if ($anchor) {
-            if (-not $script:tools.IsVisible) { $script:tools.Show() }
-            $script:tools.Left = [Math]::Round([double]$anchor.Left)
-            $script:tools.Top = [Math]::Round([double]$anchor.Top - 34)
-            if ([double]$script:tools.Top -lt 8) { $script:tools.Top = 8 }
-        } else {
-            if ($script:tools.IsVisible) { $script:tools.Hide() }
-        }
+        if (-not $script:tools.IsVisible) { $script:tools.Show() }
+        $script:tools.Left = [Math]::Round([double]$script:offX)
+        $script:tools.Top = [Math]::Round([double]$script:offY - 34)
+        if ([double]$script:tools.Top -lt 8) { $script:tools.Top = 8 }
     } catch { }
 }
 $script:tools = @(New-Tools)[-1]
