@@ -697,6 +697,7 @@ function Layout-Stack {
         $w2 = $script:wins[$k]
         if ($w2.IsVisible) { Place-Side $w2; Position-Detail $w2 }
     }
+    Position-Tools
 }
 $timer = New-Object System.Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromMilliseconds(500)
@@ -762,11 +763,12 @@ $timer.Add_Tick({
         foreach ($nid in $new) {
             $nw = $script:wins[$nid]
             if ($null -eq $nw) { continue }
-            $showIt = $script:expanded -or ($nid -eq $script:firstId)
+            $showIt = $script:expanded -or ($nid -eq $script:firstId) -or $script:positions.ContainsKey($nid)
             if ($showIt -and -not $nw.IsVisible) {
                 $nw.Show()
                 Round-Card $nw
             }
+        Position-Tools
         }
         foreach ($auxw in @($script:aux)) {
             try {
@@ -866,12 +868,21 @@ function New-Tools {
 function Position-Tools {
     try {
         if ($null -eq $script:tools) { return }
-        $first = $null
-        foreach ($k in $script:order) {
-            if ($script:wins.ContainsKey($k) -and $script:wins[$k].IsVisible) { $first = $script:wins[$k]; break }
+        # 以屏幕上最靠上的可见卡片为锚点，卡片移动/隐藏时同步
+        $anchor = $null
+        foreach ($k in @($script:wins.Keys)) {
+            $c = $script:wins[$k]
+            if ($null -eq $c -or -not $c.IsVisible) { continue }
+            if ($null -eq $anchor -or [double]$c.Top -lt [double]$anchor.Top) { $anchor = $c }
         }
-        $script:tools.Left = 16
-        if ($first) { $script:tools.Top = [Math]::Max(8, [double]$first.Top - 34) } else { $script:tools.Top = 40 }
+        if ($anchor) {
+            if (-not $script:tools.IsVisible) { $script:tools.Show() }
+            $script:tools.Left = [Math]::Round([double]$anchor.Left)
+            $script:tools.Top = [Math]::Round([double]$anchor.Top - 34)
+            if ([double]$script:tools.Top -lt 8) { $script:tools.Top = 8 }
+        } else {
+            if ($script:tools.IsVisible) { $script:tools.Hide() }
+        }
     } catch { }
 }
 $script:tools = @(New-Tools)[-1]
