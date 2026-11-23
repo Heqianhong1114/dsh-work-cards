@@ -380,6 +380,11 @@ function Place-Card($w, [int]$index) {
         $p = $script:positions[$id]
         $w.Left = [double]$p[0]
         $w.Top = [double]$p[1]
+        $sw = $script:screenW / $s
+        if ([double]$w.Left -lt 0) { $w.Left = 0 }
+        if ([double]$w.Top -lt 0) { $w.Top = 0 }
+        if (([double]$w.Left + [double]$w.Width) -gt $sw) { $w.Left = [Math]::Max(0, $sw - [double]$w.Width - 8) }
+        if (([double]$w.Top + [double]$w.Height) -gt ($sh - 50)) { $w.Top = [Math]::Max(0, $sh - 50 - [double]$w.Height) }
     }
 }
 
@@ -486,7 +491,11 @@ function Render-Detail($w, $card) {
 function Update-Card($w, $card) {
     $t = $w.Tag
     $nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-    $t.title.Text = [string]$card.title
+    $wsName = [string]$card.workspace
+    $wsShort = $wsName
+    if ($wsName -match 'D-dswork') { $wsShort = 'dswork' }
+    elseif ($wsName -match 'default-workspace') { $wsShort = '默认' }
+    if ($script:multiWs) { $t.title.Text = ('[' + $wsShort + '] ' + [string]$card.title) } else { $t.title.Text = [string]$card.title }
     $t.act.Text = [string]$card.activity
     $t.el.Text = Format-Ms ([int]$card.elapsed)
     switch ([string]$card.status) {
@@ -602,6 +611,9 @@ function Place-Side($w) {
 
 function Resolve-Overlaps {
     try {
+        $script:dpiScale = 1.0
+        try { $dh = [double][System.Windows.SystemParameters]::PrimaryScreenHeight; if ($dh -gt 0) { $script:dpiScale = $script:screenH / $dh } } catch { }
+        if ($script:dpiScale -le 0) { $script:dpiScale = 1.0 }
         $placed = @()
         # 先占住已打开的详情浮层，卡片绕开它
         foreach ($k in @($script:wins.Keys)) {
@@ -631,7 +643,9 @@ function Resolve-Overlaps {
                     if (($x -lt ($p.x + $p.w)) -and (($x + $ww) -gt $p.x) -and ($y -lt ($p.y + $p.h)) -and (($y + $hh) -gt $p.y)) { $hit = $p; break }
                 }
                 if ($null -eq $hit) { break }
-                $y = $hit.y + $hit.h + 8
+                $downY = $hit.y + $hit.h + 8
+                $upY = $hit.y - $hh - 8
+                if ((($downY + $hh) -le ($script:screenH / $script:dpiScale - 50)) -or ($upY -lt 8)) { $y = $downY } else { $y = $upY }
                 $guard++
             }
             $w.Top = [Math]::Round($y)
@@ -713,6 +727,9 @@ $timer.Add_Tick({
         $st = Get-Content $statePath -Raw -Encoding UTF8 | ConvertFrom-Json
         $cards = @($st.cards)
         $script:phase = ($script:phase + 6) % 60
+        $wsSet = @{}
+        foreach ($cc in $cards) { if ($null -ne $cc.workspace) { $wsSet[[string]$cc.workspace] = 1 } }
+        $script:multiWs = ($wsSet.Keys.Count -gt 1)
         $seen = @{}
         $i = 0
         $new = @()
@@ -727,7 +744,11 @@ $timer.Add_Tick({
                 Save-Dismissed $script:dismissed
             }
             $st = [string]$c.status
-            if ($st -eq 'idle' -and -not $script:wins.ContainsKey($id)) { continue }
+            if ($st -eq 'idle' -and -not $script:wins.ContainsKey($id)) {
+                # 刚结束（10 分钟内）的会话也显示一张，避免刚跑完的任务看不到
+                $ageMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() - [double]$c.lastEvtTime
+                if ($ageMs -gt 600000) { continue }
+            }
             $seen[$id] = $true
             if (-not $script:wins.ContainsKey($id)) {
                 $w = Card-Window $id $i
