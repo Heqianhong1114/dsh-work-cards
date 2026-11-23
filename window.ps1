@@ -1,4 +1,4 @@
-﻿Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class WC { [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr c); [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr h); [DllImport("user32.dll")] public static extern int GetSystemMetrics(int i); [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport("user32.dll")] public static extern int SetWindowRgn(IntPtr h, IntPtr rgn, bool redraw); [DllImport("gdi32.dll")] public static extern IntPtr CreateRoundRectRgn(int l, int t, int r, int b, int w, int h); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c); [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags); }'
+﻿Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class WC { [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr c); [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr h); [DllImport("user32.dll")] public static extern int GetSystemMetrics(int i); [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport("user32.dll")] public static extern int SetWindowRgn(IntPtr h, IntPtr rgn, bool redraw); [DllImport("gdi32.dll")] public static extern IntPtr CreateRoundRectRgn(int l, int t, int r, int b, int w, int h); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c); [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags); [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p); [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X; public int Y; } }'
 
 try { [WC]::SetProcessDpiAwarenessContext([IntPtr]::new(-4)) | Out-Null } catch { }
 
@@ -97,6 +97,12 @@ function Dismiss-Card($w) {
 }
 
 $script:positions = Load-Positions
+$script:offX = 0.0
+$script:offY = 0.0
+if ($script:positions.ContainsKey('__stack')) { $st0 = $script:positions['__stack']; $script:offX = [double]$st0[0]; $script:offY = [double]$st0[1] }
+# 旧版本按卡片存坐标；现在整组移动只存 __stack，迁移时清掉单卡坐标
+foreach ($k in @($script:positions.Keys)) { if ($k -ne '__stack') { $script:positions.Remove($k) } }
+Save-Positions $script:positions
 $script:dismissed = Load-Dismissed
 $script:wins = @{}
 $script:missing = @{}
@@ -119,6 +125,8 @@ $script:screenH = 1067
 try {
     $script:screenW = [WC]::GetSystemMetrics(0)
     $script:screenH = [WC]::GetSystemMetrics(1)
+$script:dpiScale = 1.0
+try { $dh0 = [double][System.Windows.SystemParameters]::PrimaryScreenHeight; if ($dh0 -gt 0) { $script:dpiScale = $script:screenH / $dh0 } } catch { }
 } catch { }
 
 function Card-Window([string]$id, [int]$index) {
@@ -331,20 +339,54 @@ function Card-Window([string]$id, [int]$index) {
                 if ($p) { [WC]::ShowWindow($p.MainWindowHandle, 9) | Out-Null; [WC]::SetForegroundWindow($p.MainWindowHandle) | Out-Null }
                 return
             }
-            $startL = [double]$sender.Left
-            $startT = [double]$sender.Top
-            $sender.Tag.dragging = $true
-            $sender.DragMove()
-            $sender.Tag.dragging = $false
-            if ([Math]::Abs([double]$sender.Left - $startL) + [Math]::Abs([double]$sender.Top - $startT) -gt 3) {
-                $script:positions[[string]$sender.Tag.id] = @([int]$sender.Left, [int]$sender.Top)
-                Save-Positions $script:positions
+            $pt = New-Object 'WC+POINT'
+            [WC]::GetCursorPos([ref]$pt) | Out-Null
+            $starts = @{}
+            foreach ($k in @($script:wins.Keys)) {
+                $c = $script:wins[$k]
+                if ($null -ne $c -and $c.IsVisible) { $starts[$k] = @([double]$c.Left, [double]$c.Top) }
             }
-            $script:selected = [string]$sender.Tag.id
-            Layout-Stack
-        } catch { try { $sender.Tag.dragging = $false } catch { } }
+            $script:drag = @{ cx = $pt.X; cy = $pt.Y; starts = $starts }
+            $sender.CaptureMouse() | Out-Null
+            foreach ($k in $starts.Keys) { $c = $script:wins[$k]; if ($c) { $c.Tag.dragging = $true } }
+        } catch { }
     })
-
+    $w.Add_MouseMove({
+        param($sender, $e)
+        try {
+            if ($null -eq $script:drag) { return }
+            if ($e.LeftButton -ne [System.Windows.Input.MouseButtonState]::Pressed) { return }
+            $pt = New-Object 'WC+POINT'
+            [WC]::GetCursorPos([ref]$pt) | Out-Null
+            $dx = ($pt.X - $script:drag.cx) / [double]$script:dpiScale
+            $dy = ($pt.Y - $script:drag.cy) / [double]$script:dpiScale
+            foreach ($k in $script:drag.starts.Keys) {
+                $c = $script:wins[$k]
+                if ($null -eq $c) { continue }
+                $c.Left = [double]$script:drag.starts[$k][0] + $dx
+                $c.Top = [double]$script:drag.starts[$k][1] + $dy
+            }
+        } catch { }
+    })
+    $w.Add_MouseLeftButtonUp({
+        param($sender, $e)
+        try {
+            if ($null -eq $script:drag) { return }
+            $pt = New-Object 'WC+POINT'
+            [WC]::GetCursorPos([ref]$pt) | Out-Null
+            $dx = ($pt.X - $script:drag.cx) / [double]$script:dpiScale
+            $dy = ($pt.Y - $script:drag.cy) / [double]$script:dpiScale
+            $script:offX = [double]$script:offX + $dx
+            $script:offY = [double]$script:offY + $dy
+            $script:positions['__stack'] = @([int]$script:offX, [int]$script:offY)
+            Save-Positions $script:positions
+            $script:drag = $null
+            $sender.ReleaseMouseCapture()
+            foreach ($k in @($script:wins.Keys)) { $c = $script:wins[$k]; if ($c) { $c.Tag.dragging = $false } }
+            $script:layoutKey = ''
+            Layout-Stack
+        } catch { }
+    })
     return $w
 }
 
@@ -376,6 +418,8 @@ function Place-Card($w, [int]$index) {
     } catch { }
     if ($s -le 0) { $s = 1.0 }
     $sh = $script:screenH / $s
+    $baseX = 16 + [double]$script:offX
+    $baseY = [double]$script:offY
     if ($script:positions.ContainsKey($id)) {
         $p = $script:positions[$id]
         $w.Left = [double]$p[0]
@@ -416,6 +460,8 @@ function Place-Detail($w) {
         if ($dipH -gt 0) { $s = $script:screenH / $dipH }
         if ($s -le 0) { $s = 1.0 }
         $sh = $script:screenH / $s
+    $baseX = 16 + [double]$script:offX
+    $baseY = [double]$script:offY
         $dipW = [double][System.Windows.SystemParameters]::PrimaryScreenWidth
         $sw = if ($dipW -gt 0) { $dipW } else { 1920 }
         $left = $w.Tag.side.Left + $w.Tag.side.Width + 6
@@ -669,12 +715,14 @@ function Layout-Stack {
     } catch { }
     if ($s -le 0) { $s = 1.0 }
     $sh = $script:screenH / $s
+    $baseX = 16 + [double]$script:offX
+    $baseY = [double]$script:offY
     $gap = 8.0
     if ($script:expanded) {
         $total = 0.0
         foreach ($k in $ids) { $total += [double]$script:wins[$k].Height }
         $total += $gap * ($ids.Count - 1)
-        $y = [Math]::Round($sh - 56 - $total)
+        $y = [Math]::Round($sh - 56 - $total + $baseY)
         if ($y -lt 20) { $y = 20 }
         foreach ($k in $ids) {
             $w = $script:wins[$k]
@@ -682,7 +730,7 @@ function Layout-Stack {
                 $placed += [pscustomobject]@{ x = [double]$w.Left; y = [double]$w.Top; w = [double]$w.Width; h = [double]$w.Height }
                 continue
             }
-            $w.Left = 16
+            $w.Left = [Math]::Round($baseX)
             $w.Top = [Math]::Round($y)
             $y += [double]$w.Height + $gap
             if (-not $w.IsVisible) { $w.Show(); Round-Card $w }
@@ -692,8 +740,8 @@ function Layout-Stack {
         }
     } else {
         $w = $script:wins[$ids[0]]
-        $w.Left = 16
-        $w.Top = [Math]::Round($sh - 56 - [double]$w.Height)
+            $w.Left = [Math]::Round($baseX)
+        $w.Top = [Math]::Round($sh - 56 - [double]$w.Height + $baseY)
         if (-not $w.IsVisible) { $w.Show(); Round-Card $w }
         Raise-Card $w
         Place-Side $w
