@@ -331,45 +331,18 @@ function Card-Window([string]$id, [int]$index) {
                 if ($p) { [WC]::ShowWindow($p.MainWindowHandle, 9) | Out-Null; [WC]::SetForegroundWindow($p.MainWindowHandle) | Out-Null }
                 return
             }
-            $pt = $e.GetPosition($sender)
-            $sender.Tag.dragX = $sender.Left
-            $sender.Tag.dragY = $sender.Top
-            $sender.Tag.dragPX = $pt.X
-            $sender.Tag.dragPY = $pt.Y
-            $sender.Tag.moved = 0
-            $sender.CaptureMouse() | Out-Null
-        } catch { }
-    })
-    $w.Add_MouseMove({
-        param($sender, $e)
-        try {
-            if ($e.LeftButton -ne [System.Windows.Input.MouseButtonState]::Pressed) { return }
-            if ($null -eq $sender.Tag.dragPX) { return }
-            $pt = $e.GetPosition($sender)
-            $dx = $pt.X - $sender.Tag.dragPX
-            $dy = $pt.Y - $sender.Tag.dragPY
-            if ($sender.Tag.moved -eq 0 -and ([Math]::Abs($dx) + [Math]::Abs($dy) -lt 4)) { return }
-            $sender.Tag.moved = 1
+            $startL = [double]$sender.Left
+            $startT = [double]$sender.Top
             $sender.Tag.dragging = $true
-            $sender.Left = [double]$sender.Tag.dragX + $dx
-            $sender.Top = [double]$sender.Tag.dragY + $dy
-        } catch { }
-    })
-    $w.Add_MouseLeftButtonUp({
-        param($sender, $e)
-        try {
-            $sender.ReleaseMouseCapture()
-            $id2 = [string]$sender.Tag.id
-            if ($sender.Tag.moved -eq 1) {
-                $script:positions[$id2] = @([int]$sender.Left, [int]$sender.Top)
+            $sender.DragMove()
+            $sender.Tag.dragging = $false
+            if ([Math]::Abs([double]$sender.Left - $startL) + [Math]::Abs([double]$sender.Top - $startT) -gt 3) {
+                $script:positions[[string]$sender.Tag.id] = @([int]$sender.Left, [int]$sender.Top)
                 Save-Positions $script:positions
             }
-            $script:selected = $id2
-            $sender.Tag.dragPX = $null
-            $sender.Tag.moved = 0
-            $sender.Tag.dragging = $false
+            $script:selected = [string]$sender.Tag.id
             Layout-Stack
-        } catch { }
+        } catch { try { $sender.Tag.dragging = $false } catch { } }
     })
 
     return $w
