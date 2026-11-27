@@ -1,6 +1,6 @@
-﻿{
+{
   "name": "dsh-work-cards",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Floating, draggable desktop cards that show what each DSH session is doing right now",
   "license": "MIT",
@@ -30,6 +30,10 @@
     "docs",
     "icon.svg"
   ],
+  "scripts": {
+    "test": "node --test test/collect.test.mjs",
+    "bench": "node test/bench.mjs"
+  },
   "engines": {
     "dsh": ">=0.2.2-rc.5"
   },

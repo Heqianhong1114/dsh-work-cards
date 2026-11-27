@@ -14,7 +14,7 @@ $logPath = Join-Path $root 'window.log'
 $dismissPath = Join-Path $root 'dismissed.json'
 
 function Log([string]$m) {
-    try { Add-Content -Path $logPath -Value ((Get-Date -Format 'HH:mm:ss') + ' ' + $m) -Encoding UTF8 } catch { }
+    try { Add-Content -Path $logPath -Value ((Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + ' ' + $m) -Encoding UTF8 } catch { }
 }
 
 function Write-Hb {

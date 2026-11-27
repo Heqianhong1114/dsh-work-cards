@@ -1,4 +1,4 @@
-﻿import { spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -16,7 +16,7 @@ export function apply(ctx, config) {
     // 卡片窗口依赖 Windows PowerShell + WPF；其它平台安静退出
     return;
   }
-  const intervalMs = Math.max(200, Number(config?.intervalMs ?? 450));
+  const intervalMs = Math.max(200, Number(config?.intervalMs ?? 1000));
   const maxCards = Math.max(1, Number(config?.maxCards ?? 6));
   const home = process.env.DSH_HOME || path.join(os.homedir(), ".dsh");
   const dir = path.join(home, "work-cards");
@@ -112,6 +112,26 @@ export function apply(ctx, config) {
   const version = String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8);
   let loadedVersion = null;
   let logCacheHint = false;
+  let lastStateJson = "";
+
+  // state.json 的写入：读方（PowerShell）可能正好在读取，rename 偶尔 EPERM；
+  // 这里重试几次，内容没变则直接跳过写盘。
+  const writeStateFile = (json) => {
+    if (json === lastStateJson) return;
+    const tmp = statePath + ".tmp";
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        fs.writeFileSync(tmp, json, "utf8");
+        fs.renameSync(tmp, statePath);
+        lastStateJson = json;
+        return;
+      } catch (e) {
+        if (attempt === 2) { noteError(e); return; }
+        try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30); } catch { }
+      }
+    }
+  };
+
   const writeState = () => {
     try {
       if (loadedVersion !== version) {
@@ -125,10 +145,9 @@ export function apply(ctx, config) {
         try { fs.unlinkSync(reqPath); } catch { }
         logCacheHint = true;
       }
-      const state = collectFn(maxCards);
-      const tmp = statePath + ".tmp";
-      fs.writeFileSync(tmp, JSON.stringify(state), "utf8");
-      fs.renameSync(tmp, statePath);
+      const state = collectFn(maxCards, { refresh: logCacheHint });
+      logCacheHint = false;
+      writeStateFile(JSON.stringify(state));
     } catch (e) { noteError(e); }
   };
 
@@ -148,13 +167,15 @@ export function apply(ctx, config) {
 
   ctx.effect(() => {
     startWindow();
-    writeState();
+    // 首拍延后：冷启动要解压解析历史日志，别和 host 自己的启动抢主线程
+    const firstTick = setTimeout(writeState, 1500);
     const timer = setInterval(() => {
       if (!child) startWindow();
       writeState();
     }, intervalMs);
     return () => {
       stopped = true;
+      clearTimeout(firstTick);
       clearInterval(timer);
       try { child?.kill(); } catch { }
       child = null;

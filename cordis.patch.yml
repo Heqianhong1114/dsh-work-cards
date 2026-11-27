@@ -2,7 +2,7 @@
     - id: work-cards
       name: 'dsh-work-cards'
       config:
-        intervalMs: 450
+        intervalMs: 1000
         maxCards: 6
         todoReminder: true
 

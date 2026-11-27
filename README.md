@@ -1,4 +1,4 @@
-﻿# dsh-work-cards
+# dsh-work-cards
 
 > 把"AI 现在在干嘛"做成桌面上看得见的东西。为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）设计的 Windows 桌面浮窗插件。
 
@@ -70,7 +70,7 @@ dsh plugin --profile desktop add link:/path/to/dsh-work-cards
 - id: work-cards
   name: 'dsh-work-cards'
   config:
-    intervalMs: 450      # 刷新间隔（毫秒）
+    intervalMs: 1000     # 刷新间隔（毫秒）
     maxCards: 6          # 最多几张卡
     todoReminder: true   # 是否给 agent 注入"先列计划"的系统提示
 ```
@@ -79,10 +79,10 @@ dsh plugin --profile desktop add link:/path/to/dsh-work-cards
 
 ```
 ~/.dsh/sessions/*/session.v4.jsonl.zstd   ← DSH 会话日志（zstd 分帧追加）
-        │  按 zstd 帧头切开、逐帧解压（带 mtime+size 缓存）
+        │  按 zstd 帧头切开、逐帧解压（mtime+size 缓存 + 尾部增量）
         ▼
   collect.mjs：还原当前动作 / 已用时间 / todo 进度 / 任务类型
-        │  每 700ms 写 ~/.dsh/work-cards/state.json（原子替换）
+        │  每 1000ms 写 ~/.dsh/work-cards/state.json（原子替换，内容没变就跳过）
         ▼
   window.ps1：PowerShell + WPF 管理 N 个置顶窗口
 ```
@@ -90,6 +90,33 @@ dsh plugin --profile desktop add link:/path/to/dsh-work-cards
 - 单实例通过 `manager.lock`（独占文件锁）保证
 - 插件随 DSH 启停，管理器由插件拉起并看护，崩溃自动重启
 
+## 性能
+
+采集逻辑做过一轮针对性优化（见 [CHANGELOG](CHANGELOG.md)），因为早期版本每 450ms 在 DSH host 的主线程上全量解压、解析所有会话日志，会让 DSH 主窗口启动变慢。
+
+现在的做法：
+
+- **先按 mtime 过滤 12 小时窗口**，再读文件；过期会话不会被解压
+- **按 `路径 + size + mtime` 缓存**解析结果，文件没变时直接复用
+- **尾部增量解析**：日志是 append-only 的 zstd 帧序列，只解析新增的完整帧；写了一半的帧留到下一拍
+- **增量分析状态机**：事件只喂一次，稳定状态下每拍只做与卡片数成正比的收尾计算
+- 默认 `intervalMs` 1000；首次采集延后 1.5s，避免和 host 启动抢主线程
+
+本机基准（2 个活跃会话）：
+
+| 场景 | 耗时 |
+|---|---|
+| 冷读（首次，启动时延后执行） | ~220ms |
+| 文件没变 | **1.6ms** |
+| 追加 1 个帧 | **10ms** |
+| 手动刷新 | 52ms |
+
+自带基准与测试：
+
+```powershell
+npm test          # 10 个用例：冷读/缓存/追加/半帧/重写/刷新/12h/多工作区/子代理/终止
+npm run bench     # 合成数据基准（26 个会话）
+```
 ## 已知限制
 
 - **仅 Windows**：依赖 PowerShell 5.1 + WPF，macOS/Linux 上插件会安静退出
@@ -98,7 +125,7 @@ dsh plugin --profile desktop add link:/path/to/dsh-work-cards
 - **ETA 是统计值**：同类型任务样本不足 3 轮时**不显示**；样本取自当前会话历史
 - **不显示子代理**：只看根会话
 - **12 小时保留**：会话超过 12 小时无活动后卡片自动移除
-- **约 0.5–1 秒延迟**：跟随日志刷新，不是实时事件流
+- **约 1 秒延迟**：跟随日志刷新，不是实时事件流
 
 ## 隐私
 
